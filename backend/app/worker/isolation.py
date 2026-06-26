@@ -34,7 +34,10 @@ from pathlib import Path
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]   # forge/backend
 SCRATCH_ROOT = BACKEND_DIR / "scratch"
-VENV_PY = BACKEND_DIR / ".venv" / "bin" / "python"
+# Local dev uses the project venv; in the Docker/cloud image there is no venv,
+# so fall back to the running interpreter (which has cadquery installed).
+_VENV_PY = BACKEND_DIR / ".venv" / "bin" / "python"
+VENV_PY = _VENV_PY if _VENV_PY.exists() else Path(sys.executable)
 RUNNER = Path(__file__).resolve().parent / "runner.py"
 
 SANDBOX_EXEC = shutil.which("sandbox-exec") if sys.platform == "darwin" else None
