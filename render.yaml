@@ -1,0 +1,18 @@
+# Render Blueprint — deploy Forge as one always-on web service.
+# Push the forge/ folder to a GitHub repo, then in Render: New + > Blueprint.
+services:
+  - type: web
+    name: forge
+    runtime: docker
+    plan: starter            # $7/mo: always-on + persistent disk. Use 'free' to try
+                             # (no disk, sleeps after 15 min, projects reset on restart).
+    healthCheckPath: /api/health
+    envVars:
+      - key: ANTHROPIC_API_KEY
+        sync: false          # paste your key in the Render dashboard (kept secret)
+      - key: FORGE_DATA_DIR
+        value: /data
+    disk:                    # persists projects + version history (remove this block on 'free')
+      name: forge-data
+      mountPath: /data
+      sizeGB: 1

@@ -1,0 +1,7 @@
+fastapi
+uvicorn[standard]
+pydantic
+cadquery
+trimesh
+anthropic
+python-multipart

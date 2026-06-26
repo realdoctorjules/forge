@@ -1,0 +1,17 @@
+# Python
+backend/.env
+backend/.venv/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/forge.db
+backend/scratch/*
+!backend/scratch/.gitkeep
+backend/projects/*
+!backend/projects/.gitkeep
+
+# Node
+frontend/node_modules/
+frontend/dist/
+
+# OS
+.DS_Store
