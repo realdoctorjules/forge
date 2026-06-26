@@ -14,7 +14,8 @@ FROM python:3.11-slim-bullseye
 ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1
 # system libraries OpenCASCADE / VTK (cadquery) need at runtime
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        libgl1 libglib2.0-0 libxrender1 libxext6 libsm6 \
+        libgl1 libglu1-mesa libglib2.0-0 libxrender1 libxext6 libsm6 \
+        libice6 libfontconfig1 libgomp1 libx11-6 libxi6 \
     && rm -rf /var/lib/apt/lists/*
 
 WORKDIR /app
