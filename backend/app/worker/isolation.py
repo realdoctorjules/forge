@@ -112,6 +112,7 @@ def run_part(
         "MPLCONFIGDIR": str(scratch),
         "PYTHONDONTWRITEBYTECODE": "1",
         "PYTHONUNBUFFERED": "1",
+        "FORGE_LOWMEM": os.environ.get("FORGE_LOWMEM", ""),
     }
 
     oplog_path = scratch / "oplog.txt"

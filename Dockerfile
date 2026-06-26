@@ -27,5 +27,7 @@ COPY --from=frontend /fe/dist ./frontend_dist
 # FastAPI serves the SPA from here; /data is the persistent disk (projects + db)
 ENV FORGE_FRONTEND_DIST=/app/frontend_dist
 ENV FORGE_DATA_DIR=/data
+# small cloud instances (e.g. Render 512MB): one CAD process at a time, 1 drawing view
+ENV FORGE_LOWMEM=1
 EXPOSE 8000
 CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"

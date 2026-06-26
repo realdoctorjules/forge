@@ -138,8 +138,9 @@ def main() -> int:
         # Real orthographic + isometric line-art projections (OCCT HLR) for 2D
         # technical drawings and patent figures. Each guarded so a bad view can't
         # fail the build.
-        _views = {"iso": (1, -1, 1), "front": (0, -1, 0),
-                  "top": (0, 0, 1), "right": (1, 0, 0)}
+        _views = ({"iso": (1, -1, 1)} if os.environ.get("FORGE_LOWMEM")
+                  else {"iso": (1, -1, 1), "front": (0, -1, 0),
+                        "top": (0, 0, 1), "right": (1, 0, 0)})
         svg_views = []
         for _name, _dir in _views.items():
             try:

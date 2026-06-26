@@ -8,7 +8,12 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 from pathlib import Path
+
+# Low-memory mode (set on small cloud instances, e.g. Render 512MB): skip the
+# resident warm worker so only one CAD process runs at a time.
+LOWMEM = bool(os.environ.get("FORGE_LOWMEM"))
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -82,6 +87,8 @@ def _build_and_store(pid: int, *, archetype: str, params: dict, material: str,
 
     if import_step:
         res = isolation.run_part(import_step=import_step, timeout_s=60.0)
+    elif LOWMEM:  # one process at a time — no resident warm worker
+        res = isolation.run_part(library.module_name(archetype), params, timeout_s=60.0)
     else:
         try:  # warm worker = fast; on death fall back to the one-shot isolated runner
             res = isolation.warm_run(library.module_name(archetype), params,
@@ -330,11 +337,14 @@ def preview(pid: int, body: GenerateRequest) -> dict:
     params = library.clamp(body.archetype, body.params or {})
     material = body.material or getattr(
         library.ARCHETYPES[body.archetype]["mod"], "DEFAULT_MATERIAL", "PLA")
-    try:
-        res = isolation.warm_run(library.module_name(body.archetype), params,
-                                 full=False, timeout_s=20.0)
-    except isolation.WarmError:
+    if LOWMEM:
         res = isolation.run_part(library.module_name(body.archetype), params, timeout_s=30.0)
+    else:
+        try:
+            res = isolation.warm_run(library.module_name(body.archetype), params,
+                                     full=False, timeout_s=20.0)
+        except isolation.WarmError:
+            res = isolation.run_part(library.module_name(body.archetype), params, timeout_s=30.0)
     if not res["ok"]:
         return {"ok": False, "error": (res.get("stderr_tail") or "build failed")[:200],
                 "crash": res.get("crash")}
