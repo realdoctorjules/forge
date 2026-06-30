@@ -37,6 +37,7 @@ type State = {
   busyPatent: boolean
   patent: { versionId: number; payload: any } | null
   busyPriorArt: boolean
+  busyPriorArtAI: boolean
   priorArt: { versionId: number; payload: any } | null
   previewing: boolean
   previewUrl: string | null
@@ -89,7 +90,7 @@ export const useStore = create<State>((set, get) => ({
   versions: [], currentVersionId: null, log: [], busy: false, building: false,
   error: null, matched: null, analysisOverride: null, selftest: {},
   aiEnabled: false, patientContact: false, busyPatent: false, patent: null,
-  busyPriorArt: false, priorArt: null,
+  busyPriorArt: false, busyPriorArtAI: false, priorArt: null,
   previewing: false, previewUrl: null, previewAnalysis: null, annotations: [],
   componentsList: [], fitComponent: '', fitResult: null, projectsList: [],
   regQuestions: [], regAnswers: {}, regResult: null,
@@ -220,10 +221,42 @@ export const useStore = create<State>((set, get) => ({
   checkPriorArt: async () => {
     const { currentVersionId } = get()
     if (currentVersionId == null) return
+    const vid = currentVersionId
     set({ busyPriorArt: true })
     try {
-      const payload = await api.priorArt(currentVersionId)
-      set({ priorArt: { versionId: currentVersionId, payload } })
+      const payload = await api.priorArt(vid)
+      set({ priorArt: { versionId: vid, payload } })
+      // If a key is set, the backend runs the real patent search in the
+      // background; poll for the found references and merge them in.
+      if (payload.ai_job) {
+        set({ busyPriorArtAI: true })
+        const jobId = payload.ai_job
+        const poll = async (tries: number) => {
+          // user navigated to another version -> stop polling
+          if (get().priorArt?.versionId !== vid) { set({ busyPriorArtAI: false }); return }
+          if (tries <= 0) {
+            set((st) => ({ busyPriorArtAI: false, priorArt: st.priorArt && st.priorArt.versionId === vid
+              ? { versionId: vid, payload: { ...st.priorArt.payload, ai_error: 'Search timed out — use the links below.' } }
+              : st.priorArt }))
+            return
+          }
+          try {
+            const job = await api.priorArtJob(jobId)
+            if (job.status === 'done') {
+              set((st) => ({ busyPriorArtAI: false, priorArt: { versionId: vid,
+                payload: { ...payload, ...job.result, links: payload.links, searched: true } } }))
+              return
+            }
+            if (job.status === 'error') {
+              set((st) => ({ busyPriorArtAI: false, priorArt: { versionId: vid,
+                payload: { ...payload, ai_error: job.error || 'Search failed — use the links below.' } } }))
+              return
+            }
+          } catch { /* transient; keep polling */ }
+          setTimeout(() => poll(tries - 1), 4000)
+        }
+        poll(60)  // ~4 min ceiling (agentic web search can take 2-3 min)
+      }
     } catch (e: any) {
       set({ error: 'Prior-art check failed: ' + String(e) })
     } finally {

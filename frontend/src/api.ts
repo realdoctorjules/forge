@@ -50,4 +50,5 @@ export const api = {
   makePatent: (vid: number, patientContact: boolean) =>
     POST(`/api/versions/${vid}/patent`, { patient_contact: patientContact }),
   priorArt: (vid: number) => POST(`/api/versions/${vid}/prior-art`),
+  priorArtJob: (jobId: string) => fetch(`/api/prior-art/jobs/${jobId}`).then(J),
 }

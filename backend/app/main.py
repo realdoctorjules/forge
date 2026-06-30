@@ -9,11 +9,31 @@ from __future__ import annotations
 import base64
 import json
 import os
+import threading
+import uuid
 from pathlib import Path
 
-# Low-memory mode (set on small cloud instances, e.g. Render 512MB): skip the
-# resident warm worker so only one CAD process runs at a time.
-LOWMEM = bool(os.environ.get("FORGE_LOWMEM"))
+# Low-memory mode: skip the resident warm worker (one CAD process at a time) and
+# render a single drawing view. FORGE_LOWMEM forces it on ("1") or off ("0"/"");
+# when unset we auto-detect from total RAM so a tier upgrade unlocks full speed
+# (warm-worker live preview + 4 drawing views) with no config change.
+def _auto_lowmem() -> bool:
+    env = os.environ.get("FORGE_LOWMEM")
+    if env is not None:
+        return env.strip().lower() not in ("", "0", "false", "no", "off")
+    try:
+        with open("/proc/meminfo") as f:
+            for line in f:
+                if line.startswith("MemTotal:"):
+                    return int(line.split()[1]) < 1_200_000  # < ~1.2 GB -> lean
+    except Exception:
+        pass
+    return False
+
+
+LOWMEM = _auto_lowmem()
+# Propagate the resolved decision to CAD subprocesses (they read the env var).
+os.environ["FORGE_LOWMEM"] = "1" if LOWMEM else ""
 
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
@@ -318,15 +338,53 @@ def drawing(vid: int, view: str):
 
 # --- prior art -------------------------------------------------------------
 
+# Background AI prior-art searches. The button returns instant search links right
+# away and (if a key is set) kicks off ai.prior_art_search on a worker thread; the
+# frontend polls /api/prior-art/jobs/{id} for the found references. Keeps the slow,
+# flaky agentic web search off the request path.
+_PA_JOBS: dict = {}
+_PA_LOCK = threading.Lock()
+
+
+def _pa_run(job_id: str, ctx: dict) -> None:
+    try:
+        data = ai.prior_art_search(ctx)
+        with _PA_LOCK:
+            _PA_JOBS[job_id] = {"status": "done", "result": data}
+    except Exception as e:  # noqa: BLE001
+        with _PA_LOCK:
+            _PA_JOBS[job_id] = {"status": "error", "error": str(e)[:300]}
+
+
 @app.post("/api/versions/{vid}/prior-art")
 def prior_art(vid: int) -> dict:
     v = db.get_version(vid)
     if not v or v["status"] != "ok":
         raise HTTPException(404, "no buildable version")
     ctx = patent._context(v)
-    # Instant, reliable: curated search links + terms. (Agentic AI web-search is
-    # too slow/flaky for a synchronous button — it was timing out at 40s.)
-    return priorart.deterministic(ctx)
+    payload = priorart.deterministic(ctx)  # instant: curated links + search terms
+    if ai.enabled():
+        job_id = uuid.uuid4().hex
+        with _PA_LOCK:
+            if len(_PA_JOBS) > 40:  # bound the in-memory store
+                for k in list(_PA_JOBS)[:20]:
+                    _PA_JOBS.pop(k, None)
+            _PA_JOBS[job_id] = {"status": "searching"}
+        threading.Thread(target=_pa_run, args=(job_id, ctx), daemon=True).start()
+        payload["ai_job"] = job_id
+        payload["ai_searching"] = True
+    else:
+        payload["ai_searching"] = False
+    return payload
+
+
+@app.get("/api/prior-art/jobs/{job_id}")
+def prior_art_job(job_id: str) -> dict:
+    with _PA_LOCK:
+        job = _PA_JOBS.get(job_id)
+    if not job:
+        raise HTTPException(404, "unknown job")
+    return job
 
 
 @app.post("/api/projects/{pid}/preview")

@@ -370,7 +370,13 @@ export default function App() {
               {priorArt && (
                 <div style={{ marginTop: 8 }}>
                   <div className="mono">{priorArt.assessment}</div>
-                  {(priorArt.references || []).slice(0, 5).map((r: any, i: number) => (
+                  {s.busyPriorArtAI && (
+                    <div className="note">🔍 Searching patent databases & the web for similar art… (this runs in the background, ~1–3 min; the links below work right now)</div>
+                  )}
+                  {priorArt.ai_error && (
+                    <div className="note">AI search unavailable ({priorArt.ai_error}). Use the links below to search yourself.</div>
+                  )}
+                  {(priorArt.references || []).slice(0, 6).map((r: any, i: number) => (
                     <div className="comp" key={i}>
                       <span><a href={r.url} target="_blank" rel="noreferrer">{r.title}</a>
                         <div className="meta">{r.overlap || r.why_relevant}</div></span>

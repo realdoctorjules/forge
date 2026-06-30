@@ -27,7 +27,8 @@ COPY --from=frontend /fe/dist ./frontend_dist
 # FastAPI serves the SPA from here; /data is the persistent disk (projects + db)
 ENV FORGE_FRONTEND_DIST=/app/frontend_dist
 ENV FORGE_DATA_DIR=/data
-# small cloud instances (e.g. Render 512MB): one CAD process at a time, 1 drawing view
-ENV FORGE_LOWMEM=1
+# FORGE_LOWMEM is intentionally NOT set: the app auto-detects RAM at startup
+# (lean under ~1.2GB, full warm-worker speed above). Set FORGE_LOWMEM=1 to force
+# lean mode, or FORGE_LOWMEM=0 to force full mode.
 EXPOSE 8000
 CMD sh -c "uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-8000}"
