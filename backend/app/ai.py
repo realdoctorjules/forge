@@ -181,9 +181,13 @@ def generate_cad_code(prompt: str) -> dict:
         "You are a mechanical CAD engineer. Write a SHORT Python script using ONLY "
         "`import cadquery as cq` (and optionally `import math`) that builds the requested "
         "device as ONE rigid, 3D-printable solid, assigning the final cadquery Workplane "
-        "to a variable named `result`. Use realistic millimetre dimensions. Prefer robust "
-        "operations; avoid huge fillets/chamfers or thin fragile features that fail to "
-        "build. Do NOT read or write files; do NOT import anything except cadquery and "
+        "to a variable named `result`. Use realistic millimetre dimensions.\n"
+        "ROBUSTNESS (critical — OCCT fails easily): build the shape as a UNION of simple "
+        "primitives (boxes, cylinders, extruded 2D profiles); make holes/openings by "
+        "cutting cylinders or shapes straight through; ensure unioned parts overlap so "
+        "they truly fuse; AVOID fillets/chamfers unless trivially small; keep it to a "
+        "handful of operations; verify the final result is a single solid.\n"
+        "Do NOT read or write files; do NOT import anything except cadquery and "
         "math. If the request is a soft/fabric/textile item or otherwise not a single "
         "rigid printable solid, build the closest rigid (or rigid-segmented) printable "
         "interpretation and say so in printable_notes. Respond with ONLY a JSON object: "
@@ -236,5 +240,25 @@ def edit_code(code: str, instruction: str) -> dict:
                                      system=sys, messages=[{"role": "user", "content": user}])
     data = _json(_text(resp))
     return {"name": (data.get("name") or "Edited device")[:60],
+            "summary": (data.get("summary") or "")[:300],
+            "code": data.get("code") or code}
+
+
+def fix_code(code: str, error: str) -> dict:
+    """Repair loop: given failing cadquery code + the error, return fixed code."""
+    sys = (
+        "A cadquery script failed to build (error/traceback below). Rewrite it so it "
+        "BUILDS and produces ONE rigid 3D-printable solid assigned to `result`, using "
+        "ONLY `import cadquery as cq` and optionally `import math`. Prefer ROBUST ops: "
+        "build the shape as a union of simple primitives; AVOID fillets/chamfers (or make "
+        "radii far smaller than the feature); make holes with simple cylinders cut through; "
+        "ensure overlapping unions actually intersect. Keep the same overall design intent. "
+        "Respond with ONLY JSON: {name (short), summary (one sentence), code (full script)}."
+    )
+    user = f"Script:\n{code}\n\nError / traceback:\n{error[:1500]}\n\nReturn the fixed JSON."
+    resp = _client().messages.create(model=MODEL, max_tokens=4000, thinking={"type": "adaptive"},
+                                     system=sys, messages=[{"role": "user", "content": user}])
+    data = _json(_text(resp))
+    return {"name": (data.get("name") or "Repaired device")[:60],
             "summary": (data.get("summary") or "")[:300],
             "code": data.get("code") or code}

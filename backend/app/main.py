@@ -380,11 +380,24 @@ def _build_generated(pid: int, *, name: str, summary: str, printable_notes: str,
                      code: str, material: str, prompt: str, parent: dict | None) -> dict:
     """Safety-scan + sandbox-run AI geometry code, store as a generated version.
     Shared by /invent and /edit (generated case)."""
-    issues = scan_source(code, allow_modules={"cadquery", "cq", "math"})
-    if issues:
-        return {"ok": False, "error": "Generated code was blocked by the safety allowlist: "
-                + "; ".join(issues), "matched": {"generated": True}}
-    res = isolation.run_part(generated_code=code, timeout_s=60.0)
+    res = None
+    for _attempt in range(3):  # first try + up to 2 AI repairs on build failure
+        issues = scan_source(code, allow_modules={"cadquery", "cq", "math"})
+        if issues:
+            return {"ok": False, "error": "Generated code was blocked by the safety allowlist: "
+                    + "; ".join(issues), "matched": {"generated": True}}
+        res = isolation.run_part(generated_code=code, timeout_s=60.0)
+        if res["ok"] or not ai.enabled():
+            break
+        err = ((res.get("result") or {}).get("trace")
+               or (res.get("result") or {}).get("error")
+               or "the build produced no valid solid (likely an OpenCASCADE failure)")
+        try:
+            fixed = ai.fix_code(code, err)
+            code, name = fixed["code"], (fixed.get("name") or name)
+            summary = fixed.get("summary") or summary
+        except Exception:  # noqa: BLE001
+            break
     ok = res["ok"]
     geometry = (res.get("result") or {}).get("metrics") if ok else None
     analysis = library.analyze(geometry["volume_mm3"], material, []) if ok and geometry else None
