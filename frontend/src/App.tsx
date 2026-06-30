@@ -412,7 +412,11 @@ export default function App() {
                     <a href={`/api/versions/${cur!.id}/patent.md`} download>
                       <button className="secondary">Download (.md)</button>
                     </a>
+                    <a href={`/api/versions/${cur!.id}/patent-figures.html`} target="_blank" rel="noreferrer">
+                      <button className="secondary">Patent figures</button>
+                    </a>
                   </div>
+                  <div className="note">Patent figures: numbered FIGs, black line-art, reference numerals with leader lines (no dimensions) — a USPTO-style draft for your attorney.</div>
                   {patent.gates?.stop && <div className="mono err" style={{ marginTop: 6 }}>{patent.gates.stop}</div>}
                 </>
               )}

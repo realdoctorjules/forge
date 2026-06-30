@@ -40,7 +40,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 
-from . import ai, components, config, db, drawings, library, patent, priorart, regulatory, slicer, storage
+from . import ai, components, config, db, drawings, figures, library, patent, priorart, regulatory, slicer, storage
 
 
 def _apply_slicer(a: dict, est: dict) -> None:
@@ -323,6 +323,15 @@ def drawing_sheet(vid: int):
     if not v or v["status"] != "ok" or not (v.get("metrics") or {}).get("geometry"):
         raise HTTPException(404, "no buildable version")
     return HTMLResponse(drawings.build_sheet(v))
+
+
+@app.get("/api/versions/{vid}/patent-figures.html")
+def patent_figures(vid: int):
+    from fastapi.responses import HTMLResponse
+    v = db.get_version(vid)
+    if not v or v["status"] != "ok" or not (v.get("metrics") or {}).get("geometry"):
+        raise HTTPException(404, "no buildable version")
+    return HTMLResponse(figures.build_sheet(v))
 
 
 @app.get("/api/versions/{vid}/drawing/{view}.svg")
