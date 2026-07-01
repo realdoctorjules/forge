@@ -283,9 +283,12 @@ export default function App() {
               <Stat k="Material" v={analysis.material} />
               <Stat k="Volume" v={`${analysis.volume_cm3} cm³`} />
               <Stat k="Components" v={`${analysis.component_count}`} />
-              <Stat k="Est. print time" v={analysis.print_time_str || `${analysis.print_time_h} h`} sub={analysis.slicer_source ? '(sliced)' : `(${analysis.print_time_h_range[0]}–${analysis.print_time_h_range[1]})`} />
-              <Stat k="Est. cost" v={`$${analysis.cost_usd}`} sub={`($${analysis.cost_usd_range[0]}–$${analysis.cost_usd_range[1]})`} />
-              <Stat k="Watertight (printable)" v={geom.watertight ? 'yes' : 'no'} />
+              {analysis.print_time_h != null
+                ? <Stat k="Est. print time" v={analysis.print_time_str || `${analysis.print_time_h} h`} sub={analysis.slicer_source ? '(sliced)' : `(${analysis.print_time_h_range[0]}–${analysis.print_time_h_range[1]})`} />
+                : <Stat k="Made by" v={analysis.process_label || 'Machined'} />}
+              <Stat k={analysis.print_time_h != null ? 'Est. cost' : 'Est. cost (stock)'} v={`$${analysis.cost_usd}`} sub={`($${analysis.cost_usd_range[0]}–$${analysis.cost_usd_range[1]})`} />
+              {analysis.cost_note && <div className="note">{analysis.cost_note}</div>}
+              <Stat k={analysis.process === 'machine' ? 'Solid (watertight)' : 'Watertight (printable)'} v={geom.watertight ? 'yes' : 'no'} />
 
               <div className="sec-title">Bill of materials</div>
               {analysis.components.map((c: any, i: number) => (
@@ -298,7 +301,7 @@ export default function App() {
 
               {dfm.length > 0 && (
                 <>
-                  <div className="sec-title">Printability (DFM)</div>
+                  <div className="sec-title">{analysis.process === 'machine' ? 'Manufacturability (DFM)' : 'Printability (DFM)'}</div>
                   {dfm.map((d: any, i: number) => (
                     <div className="mono" key={i} style={{
                       color: d.level === 'warn' ? '#ef9f27' : d.level === 'ok' ? '#5dcaa5' : '#9a9a96',

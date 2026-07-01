@@ -73,15 +73,31 @@ ARCHETYPES: dict = {
     },
 }
 
-# density g/cm^3, price USD/kg (rough, configurable later)
+# density g/cm^3, price USD/kg (rough stock prices, configurable later).
+# process: "print" = 3D printed (FDM/SLA); "machine" = cut/CNC-machined from solid
+# stock (weight stays exact, but machining labor — not shown — dominates the cost).
 MATERIALS: dict = {
-    "PLA":   {"name": "PLA",        "density": 1.24, "price_kg": 25.0},
-    "PETG":  {"name": "PETG",       "density": 1.27, "price_kg": 28.0},
-    "ABS":   {"name": "ABS",        "density": 1.04, "price_kg": 26.0},
-    "TPU":   {"name": "TPU (flex)", "density": 1.21, "price_kg": 42.0},
-    "Resin": {"name": "Resin (SLA)", "density": 1.15, "price_kg": 55.0},
-    "Nylon": {"name": "Nylon (PA12)", "density": 1.01, "price_kg": 70.0},
+    # --- 3D-printable polymers ---
+    "PLA":   {"name": "PLA",          "density": 1.24, "price_kg": 25.0, "process": "print"},
+    "PETG":  {"name": "PETG",         "density": 1.27, "price_kg": 28.0, "process": "print"},
+    "ABS":   {"name": "ABS",          "density": 1.04, "price_kg": 26.0, "process": "print"},
+    "TPU":   {"name": "TPU (flex)",   "density": 1.21, "price_kg": 42.0, "process": "print"},
+    "Resin": {"name": "Resin (SLA)",  "density": 1.15, "price_kg": 55.0, "process": "print"},
+    "Nylon": {"name": "Nylon (PA12)", "density": 1.01, "price_kg": 70.0, "process": "print"},
+    # --- machined / cut from solid stock (CNC mill, lathe, saw) ---
+    "AL6061":  {"name": "Aluminum 6061", "density": 2.70, "price_kg": 12.0, "process": "machine"},
+    "SS304":   {"name": "Stainless 304", "density": 8.00, "price_kg": 9.0,  "process": "machine"},
+    "Brass":   {"name": "Brass",         "density": 8.50, "price_kg": 14.0, "process": "machine"},
+    "Ti":      {"name": "Titanium Gr5",  "density": 4.43, "price_kg": 45.0, "process": "machine"},
+    "Delrin":  {"name": "Delrin (POM)",  "density": 1.41, "price_kg": 12.0, "process": "machine"},
+    "Acrylic": {"name": "Acrylic (PMMA)", "density": 1.18, "price_kg": 8.0, "process": "machine"},
+    "Wood":    {"name": "Hardwood",      "density": 0.75, "price_kg": 6.0,  "process": "machine"},
+    "Ply":     {"name": "Plywood",       "density": 0.60, "price_kg": 4.0,  "process": "machine"},
 }
+
+
+def material_process(material_key: str) -> str:
+    return MATERIALS.get(material_key, MATERIALS["PLA"]).get("process", "print")
 
 
 def list_archetypes() -> list[dict]:
@@ -182,18 +198,32 @@ def _name_from_prompt(prompt: str) -> str:
 
 def analyze(volume_mm3: float, material_key: str, std_parts: list) -> dict:
     mat = MATERIALS.get(material_key, MATERIALS["PLA"])
+    machined = mat.get("process", "print") == "machine"
     vol_cm3 = volume_mm3 / 1000.0
     mass_g = vol_cm3 * mat["density"]
-    filament_cost = mass_g / 1000.0 * mat["price_kg"]
+    material_cost = mass_g / 1000.0 * mat["price_kg"]
     parts_cost = sum(sp["qty"] * sp.get("unit_cost", 0.0) for sp in std_parts)
-    cost = filament_cost + parts_cost
-    rate_cm3_h = 11.0           # rough FDM deposition rate
-    time_h = vol_cm3 / rate_cm3_h + 0.15
+    cost = material_cost + parts_cost
+
+    if machined:
+        body_type = "machined"
+        process_label = "CNC-machined / cut from solid stock"
+        time_h = None
+        cost_note = ("Raw material stock only — CNC machining/labor and finishing are extra "
+                     "and usually the largest part of the cost. Get a shop quote for a real price.")
+        confidence = ("Weight is exact (solid volume × density). Cost shown is raw stock only; "
+                      "machining time and labor are NOT included.")
+    else:
+        body_type = "3D-printed"
+        process_label = "3D printed (FDM/SLA)"
+        time_h = round(vol_cm3 / 11.0 + 0.15, 2)   # rough FDM deposition rate
+        cost_note = None
+        confidence = "rough pre-slicer estimate — ranges shown; do not make irreversible decisions on these"
 
     components = [{
-        "name": "printed body", "type": "3D-printed", "qty": 1,
+        "name": f"{body_type} body", "type": body_type, "qty": 1,
         "material": mat["name"], "mass_g": round(mass_g, 1),
-        "cost_usd": round(filament_cost, 2),
+        "cost_usd": round(material_cost, 2),
     }]
     for sp in std_parts:
         components.append({
@@ -209,25 +239,47 @@ def analyze(volume_mm3: float, material_key: str, std_parts: list) -> dict:
     return {
         "material": mat["name"],
         "material_key": material_key,
+        "process": mat.get("process", "print"),
+        "process_label": process_label,
         "density_g_cm3": mat["density"],
         "volume_cm3": round(vol_cm3, 2),
         "mass_g": round(mass_g, 1),
         "mass_g_range": rng(mass_g, 0.15),
-        "filament_cost_usd": round(filament_cost, 2),
+        "filament_cost_usd": round(material_cost, 2),
+        "material_cost_usd": round(material_cost, 2),
         "parts_cost_usd": round(parts_cost, 2),
         "cost_usd": round(cost, 2),
         "cost_usd_range": rng(cost, 0.20),
-        "print_time_h": round(time_h, 2),
-        "print_time_h_range": rng(time_h, 0.40),
+        "cost_note": cost_note,
+        "print_time_h": round(time_h, 2) if time_h is not None else None,
+        "print_time_h_range": rng(time_h, 0.40) if time_h is not None else None,
         "components": components,
         "component_count": component_count,
-        "confidence": "rough pre-slicer estimate — ranges shown; do not make irreversible decisions on these",
+        "confidence": confidence,
     }
 
 
-def dfm_check(archetype: str, params: dict, geom: dict) -> list[dict]:
-    """Quick design-for-3D-printing sanity checks. Heuristic, not a slicer."""
-    out: list[dict] = []
+def dfm_check(archetype: str, params: dict, geom: dict, process: str = "print") -> list[dict]:
+    """Quick design-for-manufacture sanity checks. Heuristic, not a slicer/CAM."""
+    if process == "machine":
+        out: list[dict] = []
+        wall = params.get("wall", params.get("thickness"))
+        if wall is not None and wall < 1.0:
+            out.append({"level": "warn",
+                        "msg": f"Wall {wall} mm is thin for machining — it can chatter or deflect; "
+                               "consider ≥1.5 mm or a different process."})
+        bb = geom.get("bbox_mm") or {}
+        deep = [v for v in (bb.get("x"), bb.get("y"), bb.get("z")) if v]
+        if geom.get("faces", 0) and geom.get("watertight"):
+            out.append({"level": "info",
+                        "msg": "Machined from solid: internal cavities need tool access "
+                               "(fully enclosed hollows aren't millable in one piece — split it, "
+                               "or cast/print instead)."})
+        out.append({"level": "info",
+                    "msg": "Sharp internal corners need a tool-radius fillet; add small fillets "
+                           "where an end mill must reach."})
+        return out
+    out = []
     wall = params.get("wall", params.get("thickness"))
     if wall is not None and wall < 0.8:
         out.append({"level": "warn",

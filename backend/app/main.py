@@ -59,7 +59,8 @@ def _apply_slicer(a: dict, est: dict) -> None:
 
 
 def _slice_into(analysis, scratch, material) -> None:
-    if analysis and slicer.available():
+    # Only meaningful for 3D-printed materials; machined metal/wood aren't sliced.
+    if analysis and library.material_process(material) == "print" and slicer.available():
         est = slicer.slice_estimate(Path(scratch) / "part.stl", material)
         if est:
             _apply_slicer(analysis, est)
@@ -125,7 +126,7 @@ def _build_and_store(pid: int, *, archetype: str, params: dict, material: str,
             if archetype in library.ARCHETYPES else [])
         _slice_into(analysis, res["scratch"], material)
 
-    dfm = (library.dfm_check(archetype, params, geometry)
+    dfm = (library.dfm_check(archetype, params, geometry, library.material_process(material))
            if ok and geometry and archetype in library.ARCHETYPES else None)
     metrics = {
         "geometry": geometry, "analysis": analysis, "dfm": dfm,
@@ -418,7 +419,7 @@ def preview(pid: int, body: GenerateRequest) -> dict:
     geom = res["result"]["metrics"]
     analysis = library.analyze(geom["volume_mm3"], material,
                                library.standard_parts(body.archetype))
-    dfm = library.dfm_check(body.archetype, params, geom)
+    dfm = library.dfm_check(body.archetype, params, geom, library.material_process(material))
     stl = (Path(res["scratch"]) / "part.stl").read_bytes()
     return {"ok": True, "geometry": geom, "analysis": analysis, "dfm": dfm,
             "stl_b64": base64.b64encode(stl).decode()}
